@@ -511,7 +511,7 @@ for marca in MARCAS_CREA_KW:
 
 # Leer mes anterior para clasificar clientes
 key_ant = sorted(ventas.keys())[0] if len(ventas) > 1 else key_act
-df_ant_src = pd.read_excel(ventas[key_ant], usecols=["Cliente","Cantidad",
+df_ant_src = pd.read_excel(ventas[key_ant], usecols=["Cliente","Cantidad","camion",
     "proveedor","articulo","tipo_venta"])
 df_ant_src = df_ant_src[df_ant_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
 df_ant_src["_marca"] = df_ant_src["articulo"].apply(
@@ -519,11 +519,20 @@ df_ant_src["_marca"] = df_ant_src["articulo"].apply(
 df_ant_src["_neto"] = pd.to_numeric(df_ant_src["Cantidad"], errors="coerce").fillna(0)
 
 # Clientes con cobertura mes anterior por marca
+# Distinguir venta real (camion<700) de creativa (camion>=700)
 cob_ant = {}
+cob_ant_real = {}  # solo con venta real
 for marca in MARCAS_CREA_KW:
     dm = df_ant_src[df_ant_src["_marca"]==marca]
     neto = dm.groupby("Cliente")["_neto"].sum()
     cob_ant[marca] = set(int(c) for c in neto[neto >= 3].index)
+    # Solo venta real (camion < 700)
+    if "camion" in df_ant_src.columns:
+        dm_real = df_ant_src[(df_ant_src["_marca"]==marca) & (df_ant_src["camion"]<700)]
+    else:
+        dm_real = dm
+    neto_real = dm_real.groupby("Cliente")["_neto"].sum()
+    cob_ant_real[marca] = set(int(c) for c in neto_real[neto_real >= 3].index)
 
 # Vendedor principal por cliente
 vend_cli_crea = df_crea_src[df_crea_src["cod_ven"].apply(si).isin(SUP_MAP)].groupby(
@@ -568,12 +577,16 @@ for marca in MARCAS_CREA_KW:
         cid = int(si(cid_raw))
         vend = int(vend_cli_crea.get(cid_raw, 0))
         if vend not in SUP_MAP or SUP_MAP[vend] == 600: continue
-        # Clasificar
+        # Clasificar:
+        # - compró con venta REAL el mes anterior → esperar hasta día 14
+        # - solo compró con creativa el mes anterior → sugerir ya
+        # - no compró → sin historial → sugerir ya
+        compro_ant_real_mk = cid in cob_ant_real[marca]
         compro_ant = cid in cob_ant[marca]
-        if compro_ant and dias_trab_act <= UMBRAL_CREATIVA:
+        if compro_ant_real_mk and dias_trab_act <= UMBRAL_CREATIVA:
             estado = "espera"
         elif compro_ant:
-            estado = "sugerir"
+            estado = "sugerir"  # compró solo con creativa → sugerir ya
         else:
             estado = "sin_hist"
         # Solo incluir en lista si hay que sugerir creativa
