@@ -567,6 +567,7 @@ tr:hover td{background:var(--bg3)}
 
 
 
+
 function openUpload(){} // eliminado
 
 
@@ -1868,17 +1869,43 @@ function renderRechazo() {
   // Alertas
   const mediaD = perf.filter(p=>getV(p)>0).reduce((a,p)=>a+(getV(p)?getD(p)/getV(p):0),0) / (perf.filter(p=>getV(p)>0).length||1) * 100;
   const mediaC = perf.filter(p=>getV(p)>0).reduce((a,p)=>a+(getV(p)?getC(p)/getV(p):0),0) / (perf.filter(p=>getV(p)>0).length||1) * 100;
+  // Umbrales invendibles: critico >= 0.8%, seguimiento >= 0.6%
+  const UMBRAL_CRIT_C = 0.8;
+  const UMBRAL_SEG_C  = 0.6;
 
   const alD = perf.filter(p=>getV(p)>0 && getD(p)/getV(p)*100 > mediaD*1.5).sort((a,b)=>getD(b)/getV(b)-getD(a)/getV(a));
-  const alC = perf.filter(p=>getV(p)>0 && getC(p)/getV(p)*100 > mediaC*1.5).sort((a,b)=>getC(b)/getV(b)-getC(a)/getV(a));
+  const alC = perf.filter(p=>getV(p)>0 && getC(p)/getV(p)*100 >= UMBRAL_SEG_C).sort((a,b)=>getC(b)/getV(b)-getC(a)/getV(a));
 
   document.getElementById('rec-alertas-devol').innerHTML = alD.length
     ? alD.map(p=>'<div class="alert al-rd"><div class="al-title">V'+p.cod+' '+p.nom+' — '+(getD(p)/getV(p)*100).toFixed(2)+'%</div><div class="al-desc">'+fmtM(getD(p))+' en devolución · media '+mediaD.toFixed(2)+'%</div></div>').join('')
     : '<div style="color:var(--gr-l);font-size:12px;padding:10px">✓ Sin alertas</div>';
 
-  document.getElementById('rec-alertas-cambio').innerHTML = alC.length
-    ? alC.map(p=>'<div class="alert al-am"><div class="al-title">V'+p.cod+' '+p.nom+' — '+(getC(p)/getV(p)*100).toFixed(2)+'%</div><div class="al-desc">'+fmtM(getC(p))+' en invendible · media '+mediaC.toFixed(2)+'%</div></div>').join('')
-    : '<div style="color:var(--gr-l);font-size:12px;padding:10px">✓ Sin alertas</div>';
+  // Total general de invendibles
+  const totVGen = perf.reduce((a,p)=>a+getV(p),0);
+  const totCGen = perf.reduce((a,p)=>a+getC(p),0);
+  const pctCGen = totVGen ? totCGen/totVGen*100 : 0;
+
+  document.getElementById('rec-alertas-cambio').innerHTML =
+    '<div style="margin-bottom:8px;padding:8px;background:var(--bg3);border-radius:6px;font-size:11px">' +
+    'General: <strong>' + pctCGen.toFixed(2) + '%</strong> · ' +
+    (pctCGen >= UMBRAL_CRIT_C
+      ? '<span style="color:var(--rd-l);font-weight:700">⚠ CRÍTICO — supera ' + UMBRAL_CRIT_C + '%</span>'
+      : pctCGen >= UMBRAL_SEG_C
+        ? '<span style="color:var(--am-l);font-weight:700">↗ SEGUIMIENTO — supera ' + UMBRAL_SEG_C + '%</span>'
+        : '<span style="color:var(--gr-l)">✓ OK</span>') +
+    '</div>' +
+    (alC.length
+      ? alC.map(p => {
+          const pct = getC(p)/getV(p)*100;
+          const esCrit = pct >= UMBRAL_CRIT_C;
+          const col = esCrit ? 'al-rd' : 'al-am';
+          const tag = esCrit ? '⚠ CRÍTICO' : '↗ SEGUIMIENTO';
+          return '<div class="alert ' + col + '">' +
+            '<div class="al-title">V'+p.cod+' '+p.nom+' — '+pct.toFixed(2)+'% <span style="font-size:10px;opacity:.8">'+tag+'</span></div>' +
+            '<div class="al-desc">'+fmtM(getC(p))+' en invendible · umbral crit '+UMBRAL_CRIT_C+'% · seg '+UMBRAL_SEG_C+'%</div>' +
+          '</div>';
+        }).join('')
+      : '<div style="color:var(--gr-l);font-size:12px;padding:10px">✓ Sin alertas — todos bajo ' + UMBRAL_SEG_C + '%</div>');
 
   // Gráficos
   const sorted = [...perf].filter(p=>getV(p)>0).sort((a,b)=>(getD(b)/getV(b))-(getD(a)/getV(a)));
@@ -1916,7 +1943,7 @@ function renderRechazo() {
   // Tabla
   const sortedT = [...perf].sort((a,b)=>getD(b)-getD(a));
   const mdCol = (v,pv) => v/pv*100>mediaD*1.5?'var(--rd)':v/pv*100>mediaD?'var(--am)':'var(--gr)';
-  const mcCol = (v,pv) => v/pv*100>mediaC*1.5?'var(--am)':v/pv*100>mediaC?'var(--am-l)':'var(--gr)';
+  const mcCol = (v,pv) => { const p=v/pv*100; return p>=UMBRAL_CRIT_C?'var(--rd-l)':p>=UMBRAL_SEG_C?'var(--am-l)':'var(--gr-l)'; };
   document.getElementById('rec-tbody').innerHTML = sortedT.map(p => {
     const v=getV(p),d=getD(p),c=getC(p);
     const dp=v?+(d/v*100).toFixed(2):0, cp=v?+(c/v*100).toFixed(2):0;
@@ -2540,6 +2567,7 @@ function renderGerencial() {
   }).join('') :
   '<tr><td colspan="9" style="text-align:center;color:var(--tx3);padding:20px">Sin clientes con los filtros aplicados</td></tr>';
 }
+
 
 
 
