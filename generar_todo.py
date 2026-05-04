@@ -483,61 +483,112 @@ for key in sorted(ventas.keys()):
     RECHAZO_DATA[etiq_r] = {"perf":perf_rec,"stats":{}}
     print(f"  {etiq_r}: {len(perf_rec)} vendedores")
 
-# CREA_DATA - clientes que necesitan venta creativa en Lays/Doritos/Cheetos/3D
+# CREA_DATA - clientes con análisis de cobertura creativa por marca
 print("\nCalculando venta creativa necesaria...")
 MARCAS_CREA_KW = {"Lays":"lays","Doritos":"doritos","Cheetos":"cheetos","3D":"3d"}
 ART_SUGERIDO_CREA = {
     "Lays":    {"art":"Lays Clasicas 40gx68x1",      "codigo":"300059432","precio":929.75},
     "Doritos": {"art":"Doritos Queso 40gx70x1",       "codigo":"300059545","precio":929.75},
     "Cheetos": {"art":"Cheetos Queso 43gx70x1",       "codigo":"300059433","precio":929.75},
-    "3D":      {"art":"3d Queso 43gx75x1","codigo":"300058395","precio":929.75},
+    "3D":      {"art":"3d Queso 43gx75x1",            "codigo":"300058395","precio":929.75},
 }
-# Usar datos del mes activo (sin creativa)
+
+# Leer sábana actual (con y sin creativa para el neto real)
 key_act = sorted(ventas.keys())[-1]
-df_crea_src = pd.read_excel(ventas[key_act], usecols=["Cliente","Fecha","Cantidad","camion",
+df_crea_src = pd.read_excel(ventas[key_act], usecols=["Cliente","Cantidad","camion",
     "proveedor","articulo","cod_ven","tipo_venta"])
-df_crea_src["Fecha"] = pd.to_datetime(df_crea_src["Fecha"], errors="coerce")
-hoy_crea = pd.Timestamp(datetime.now().date())
-# Para CREA_DATA: incluir TODA la venta (real + creativa) para no repetir
-# Si ya se hizo creativa de una marca, el neto ya >= 3 y no aparece en la lista
-df_crea_src = df_crea_src[(df_crea_src["Fecha"]<=hoy_crea) &
-    df_crea_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
-
-def get_marca_crea(art):
-    a = str(art).lower()
-    for mk,kw in MARCAS_CREA_KW.items():
-        if kw in a: return mk
-    return None
-
-df_crea_src["_marca"] = df_crea_src["articulo"].apply(get_marca_crea)
-# Neto real: sumar Cantidad directamente (ya viene con signo correcto)
-# Positivo = venta/reemplazo, Negativo = devolucion/cambio
-df_crea_src = df_crea_src[df_crea_src["tipo_venta"].isin(["Venta","Devolucion","Cambio"])].copy()
+df_crea_src["Fecha"] = pd.to_datetime(df_crea_src.get("Fecha",pd.NaT) if "Fecha" in df_crea_src.columns else pd.NaT, errors="coerce")
+df_crea_src = df_crea_src[df_crea_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
+df_crea_src["_marca"] = df_crea_src["articulo"].apply(
+    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if kw in str(a).lower()), None))
 df_crea_src["_neto"] = pd.to_numeric(df_crea_src["Cantidad"], errors="coerce").fillna(0)
+
+# Neto por cliente y marca (todos los camiones para no duplicar creativa)
+neto_act = {}
+for marca in MARCAS_CREA_KW:
+    dm = df_crea_src[df_crea_src["_marca"]==marca]
+    neto_act[marca] = dm.groupby("Cliente")["_neto"].sum()
+
+# Leer mes anterior para clasificar clientes
+key_ant = sorted(ventas.keys())[0] if len(ventas) > 1 else key_act
+df_ant_src = pd.read_excel(ventas[key_ant], usecols=["Cliente","Cantidad",
+    "proveedor","articulo","tipo_venta"])
+df_ant_src = df_ant_src[df_ant_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
+df_ant_src["_marca"] = df_ant_src["articulo"].apply(
+    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if kw in str(a).lower()), None))
+df_ant_src["_neto"] = pd.to_numeric(df_ant_src["Cantidad"], errors="coerce").fillna(0)
+
+# Clientes con cobertura mes anterior por marca
+cob_ant = {}
+for marca in MARCAS_CREA_KW:
+    dm = df_ant_src[df_ant_src["_marca"]==marca]
+    neto = dm.groupby("Cliente")["_neto"].sum()
+    cob_ant[marca] = set(int(c) for c in neto[neto >= 3].index)
 
 # Vendedor principal por cliente
 vend_cli_crea = df_crea_src[df_crea_src["cod_ven"].apply(si).isin(SUP_MAP)].groupby(
     "Cliente")["cod_ven"].agg(lambda x: si(x.mode()[0]))
 
+# Días trabajados del mes actual
+dias_trab_act = datos_meses[key_act]["dias_trab"]
+UMBRAL_CREATIVA = 14  # después de 14 días, los "en espera" pasan a sugerir creativa
+
+# Resumen de cobertura por marca (para el panel)
+CREA_RESUMEN = {}
+for marca in MARCAS_CREA_KW:
+    neto_m = neto_act[marca]
+    cart_total = len(set(int(c) for c in mc_dict.keys() if mc_dict[c].get("m",0) in [300,400,500]))
+    con_cob = int((neto_m >= 3).sum())
+    sin_cob_cids = set(int(c) for c in neto_m[neto_m < 3].index) |                    set(int(c) for c in mc_dict.keys() 
+                       if mc_dict[c].get("m",0) in [300,400,500] and int(si(c)) not in set(neto_m.index))
+    en_espera = set(c for c in sin_cob_cids if c in cob_ant[marca] and dias_trab_act <= UMBRAL_CREATIVA)
+    sugerir   = set(c for c in sin_cob_cids if c not in en_espera)
+    sin_hist  = set(c for c in sugerir if c not in cob_ant[marca])
+    CREA_RESUMEN[marca] = {
+        "cartera": cart_total,
+        "con_cob": con_cob,
+        "en_espera": len(en_espera),
+        "sugerir": len(sugerir),
+        "sin_hist": len(sin_hist),
+        "pct_actual": round(con_cob/cart_total*100,1) if cart_total else 0,
+        "objetivo": OBJ_MARCA.get(marca,{}).get(list(OBJ_MARCA.get(marca,{}).keys())[-1] if OBJ_MARCA.get(marca) else "",0),
+    }
+    print(f"  {marca}: cob={con_cob} espera={len(en_espera)} sugerir={len(sugerir)}")
+
+# Lista de clientes a hacer creativa
 CREA_DATA = []
 for marca in MARCAS_CREA_KW:
-    dm = df_crea_src[df_crea_src["_marca"]==marca]
-    neto_cli = dm.groupby("Cliente")["_neto"].sum()
-    for cid, neto in neto_cli[neto_cli<3].items():
-        neto_real = float(neto)
-        # Si neto >= 3 ya tiene cobertura, no debería estar acá
-        if neto_real >= 3: continue
-        qty = max(1, round(3 - neto_real))
-        vend = int(vend_cli_crea.get(cid, 0))
-        if vend not in SUP_MAP or SUP_MAP[vend]==600: continue
+    neto_m = neto_act[marca]
+    for cid_raw, neto in neto_m[neto_m < 3].items():
+        cid = int(si(cid_raw))
+        vend = int(vend_cli_crea.get(cid_raw, 0))
+        if vend not in SUP_MAP or SUP_MAP[vend] == 600: continue
+        # Clasificar
+        compro_ant = cid in cob_ant[marca]
+        if compro_ant and dias_trab_act <= UMBRAL_CREATIVA:
+            estado = "espera"
+        elif compro_ant:
+            estado = "sugerir"
+        else:
+            estado = "sin_hist"
+        # Solo incluir en lista si hay que sugerir creativa
+        if estado == "espera": continue
         art = ART_SUGERIDO_CREA[marca]
-        # Extraer solo nombres de día (sin número de vendedor)
+        neto_real = float(neto)
+        qty = max(1, round(3 - neto_real))
         dias_visita = [d[0] if isinstance(d, list) else str(d) 
-                       for d in dias_map.get(int(si(cid)), [])]
-        CREA_DATA.append({"cliente":int(si(cid)),"vendedor":vend,"mesa":SUP_MAP[vend],
+                       for d in dias_map.get(cid, [])]
+        # Venta mes anterior de esa marca
+        df_ant_cli = df_ant_src[(df_ant_src["Cliente"]==cid_raw) & (df_ant_src["_marca"]==marca)]
+        neto_ant = float(df_ant_cli["_neto"].sum()) if len(df_ant_cli) else 0
+        CREA_DATA.append({
+            "cliente":cid,"vendedor":vend,"mesa":SUP_MAP[vend],
             "marca":marca,"articulo":art["art"],"codigo_art":art["codigo"],
-            "precio":art["precio"],"neto_actual":round(neto,0),"cantidad_crea":qty,
-            "dias":dias_visita})
+            "precio":art["precio"],"neto_actual":round(neto_real,0),
+            "cantidad_crea":qty,"dias":dias_visita,
+            "estado":estado,"neto_ant":round(neto_ant,0),
+            "compro_ant":compro_ant,
+        })
 
 print(f"  {len(CREA_DATA)} registros de venta creativa ({len(set(r['cliente'] for r in CREA_DATA))} clientes)")
 
@@ -550,8 +601,10 @@ dp_js="const DATA_PERIODOS="+json.dumps(DATA_PERIODOS,ensure_ascii=True,separato
 cv_js="var CARTERA_VEND_BASE="+json.dumps(CARTERA_VEND_BASE,ensure_ascii=True,separators=(",",":"))+  ";"
 rec_js="var RECHAZO_DATA="+json.dumps(RECHAZO_DATA,ensure_ascii=True,separators=(",",":"))+";"
 crea_js="const CREA_DATA="+json.dumps(CREA_DATA,ensure_ascii=True,separators=(",",":"))+";"
+CREA_RESUMEN_JS="const CREA_RESUMEN="+json.dumps(CREA_RESUMEN,ensure_ascii=True,separators=(",",":"))+";"
+DIAS_TRAB_JS="const DIAS_TRAB_ACT="+str(datos_meses[key_act]["dias_trab"])+";"
 obj_marca_js="const OBJ_MARCA_DATA="+json.dumps(OBJ_MARCA,ensure_ascii=True,separators=(",",":"))+";"
-datos_js="\n".join([dm_js,dmc_js,dp_js,cv_js,rec_js,crea_js,obj_marca_js])
+datos_js="\n".join([dm_js,dmc_js,dp_js,cv_js,rec_js,crea_js,CREA_RESUMEN_JS,DIAS_TRAB_JS,obj_marca_js])
 guia_js="const GUIA_DATA="+json.dumps(GUIA_DATA,ensure_ascii=True,separators=(",",":"))+  ";"
 abr_js="const ABR_DATA="+json.dumps(ABR_DATA,ensure_ascii=True,separators=(",",":"))+  ";"
 stats_js="const VEND_STATS="+json.dumps(VEND_STATS,ensure_ascii=True,separators=(",",":"))+  ";"

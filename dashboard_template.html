@@ -465,6 +465,10 @@ tr:hover td{background:var(--bg3)}
 
   <!-- Contenido (oculto hasta autenticar) -->
   <div id="ger-content" style="display:none">
+    <!-- Resumen por marca -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px" id="ger-resumen-marcas"></div>
+    <!-- Avance del mes -->
+    <div class="card" style="margin-bottom:14px;padding:10px 14px" id="ger-avance"></div>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
       <div>
         <div style="font-size:11px;color:var(--tx3);margin-bottom:4px">Filtrar por mesa</div>
@@ -529,8 +533,8 @@ tr:hover td{background:var(--bg3)}
             <th>Mesa</th>
             <th>Día visita</th>
             <th>Marca</th>
-            <th>Artículo sugerido</th>
-            <th>Cód. artículo</th>
+            <th>Estado</th>
+            <th>Mes anterior</th>
             <th class="num">Uds actuales</th>
             <th class="num">Cantidad creativa</th>
           </tr></thead>
@@ -550,6 +554,7 @@ tr:hover td{background:var(--bg3)}
 // __CARTERA_DATA__
 </script>
 <script>
+
 
 
 
@@ -2406,16 +2411,18 @@ function checkGerPass() {
 
 function renderGerencial() {
   if (!GER_AUTH) return;
-  if (typeof CREA_DATA === 'undefined' || !CREA_DATA.length) {
+  if (typeof CREA_DATA === 'undefined' || typeof CREA_RESUMEN === 'undefined') {
     document.getElementById('ger-tbody').innerHTML =
-      '<tr><td colspan="8" style="text-align:center;color:var(--tx3);padding:20px">Sin datos de venta creativa</td></tr>';
+      '<tr><td colspan="9" style="text-align:center;color:var(--tx3);padding:20px">Sin datos — subí la sábana para generar</td></tr>';
     return;
   }
 
-  const mesaF = document.getElementById('ger-mesa')?.value || 'all';
+  const mesaF  = document.getElementById('ger-mesa')?.value  || 'all';
   const marcaF = document.getElementById('ger-marca')?.value || 'all';
-  const vendF  = document.getElementById('ger-vend')?.value || 'all';
-  const diaF   = document.getElementById('ger-dia')?.value || 'all';
+  const vendF  = document.getElementById('ger-vend')?.value  || 'all';
+  const diaF   = document.getElementById('ger-dia')?.value   || 'all';
+  const diasTrab = typeof DIAS_TRAB_ACT !== 'undefined' ? DIAS_TRAB_ACT : 0;
+  const UMBRAL = 14;
 
   // Poblar select de vendedores
   const vendEl = document.getElementById('ger-vend');
@@ -2423,93 +2430,106 @@ function renderGerencial() {
     const vends = [...new Set(CREA_DATA.map(r => r.vendedor))].sort((a,b)=>a-b);
     vends.forEach(v => {
       const opt = document.createElement('option');
-      opt.value = v; opt.textContent = 'V' + v;
+      opt.value = v; opt.textContent = 'V'+v;
       vendEl.appendChild(opt);
     });
   }
 
+  // ── RESUMEN POR MARCA ───────────────────────────────────
+  const marcas = ['Lays','Doritos','Cheetos','3D'];
+  const MARCA_COLOR = {Lays:'var(--bl)',Doritos:'#f0a500',Cheetos:'#f04d4d','3D':'var(--gr)'};
+  let resHtml = '';
+  marcas.forEach(mk => {
+    if (marcaF !== 'all' && mk !== marcaF) return;
+    const r = CREA_RESUMEN[mk] || {};
+    const pct = r.pct_actual || 0;
+    const obj = r.objetivo || 0;
+    const col = pct >= obj ? 'var(--gr-l)' : pct >= obj*0.85 ? 'var(--am-l)' : 'var(--rd-l)';
+    const barW = Math.min(100, Math.round(pct));
+    const barCol = pct >= obj ? '#2ecc8a' : pct >= obj*0.85 ? '#f0a500' : '#f04d4d';
+    resHtml +=
+      '<div class="kpi" style="flex:1;min-width:140px">'+
+        '<div style="font-size:11px;font-weight:700;color:'+(MARCA_COLOR[mk]||'var(--tx2)')+';margin-bottom:6px">'+mk+'</div>'+
+        '<div style="font-size:20px;font-weight:700;color:var(--tx1)">'+(r.con_cob||0).toLocaleString()+'</div>'+
+        '<div style="font-size:10px;color:var(--tx3);margin-bottom:6px">de '+(r.cartera||0).toLocaleString()+' · obj '+(obj||'—')+'%</div>'+
+        '<div style="height:4px;background:var(--bg4);border-radius:2px;margin-bottom:4px">'+
+          '<div style="height:100%;width:'+barW+'%;background:'+barCol+';border-radius:2px"></div>'+
+        '</div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:10px">'+
+          '<span style="color:'+col+'">'+pct+'% actual</span>'+
+          '<span style="color:var(--tx3)">falta '+(Math.max(0,obj-pct)).toFixed(1)+'%</span>'+
+        '</div>'+
+        '<div style="margin-top:8px;display:flex;flex-direction:column;gap:2px;font-size:10px">'+
+          '<div style="display:flex;justify-content:space-between">'+
+            '<span style="color:var(--rd-l)">● Sin historial</span><span>'+(r.sin_hist||0)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between">'+
+            '<span style="color:var(--am-l)">● Sugerir creativa</span><span>'+(r.sugerir||0)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between">'+
+            '<span style="color:var(--bl-l)">● En espera</span><span>'+(r.en_espera||0)+'</span></div>'+
+        '</div>'+
+      '</div>';
+  });
+
+  const resEl = document.getElementById('ger-resumen-marcas');
+  if (resEl) resEl.innerHTML = resHtml;
+
+  // ── AVANCE DEL MES ──────────────────────────────────────
+  const avEl = document.getElementById('ger-avance');
+  if (avEl) {
+    const pctMes = diasTrab >= UMBRAL ? 100 : Math.round(diasTrab/UMBRAL*100);
+    const msg = diasTrab < UMBRAL
+      ? 'Días '+diasTrab+'/'+UMBRAL+' · los clientes en espera tienen hasta el día '+UMBRAL+' para comprar solos'
+      : 'Superado el umbral de '+UMBRAL+' días · todos los sin cobertura se sugieren para creativa';
+    avEl.innerHTML =
+      '<div style="font-size:11px;color:var(--tx3);margin-bottom:4px">'+msg+'</div>'+
+      '<div style="height:4px;background:var(--bg4);border-radius:2px">'+
+        '<div style="height:100%;width:'+pctMes+'%;background:'+(diasTrab>=UMBRAL?'var(--rd)':'var(--bl)')+';border-radius:2px"></div>'+
+      '</div>';
+  }
+
+  // ── TABLA DE CLIENTES ────────────────────────────────────
   let data = CREA_DATA;
   if (mesaF  !== 'all') data = data.filter(r => String(r.mesa) === mesaF);
   if (marcaF !== 'all') data = data.filter(r => r.marca === marcaF);
   if (vendF  !== 'all') data = data.filter(r => String(r.vendedor) === vendF);
-  if (diaF   !== 'all') data = data.filter(r => (r.dias||[]).some(function(d){ return (Array.isArray(d)?d[0]:String(d))===diaF; }));
+  if (diaF   !== 'all') data = data.filter(r => (r.dias||[]).some(d=>(Array.isArray(d)?d[0]:d)===diaF));
 
-  // Resumen
   const clis = new Set(data.map(r => r.cliente)).size;
-  const uds = data.reduce((a,r) => a + r.cantidad_crea, 0);
-  document.getElementById('ger-resumen').textContent =
-    clis + ' clientes · ' + uds + ' unidades a crear';
+  const uds = data.reduce((a,r) => a+r.cantidad_crea, 0);
+  const resEl2 = document.getElementById('ger-resumen');
+  if (resEl2) resEl2.textContent = clis+' clientes · '+uds+' unidades a crear';
 
-  const MARCA_COLOR = {Lays:'#4d8ef0',Doritos:'#f0a500',Cheetos:'#f04d4d','3D':'#2ecc8a'};
+  const ESTADO_LABEL = {
+    'sugerir': '<span style="font-size:11px;background:#f0432222;color:var(--rd-l);padding:2px 8px;border-radius:4px">sugerir creativa</span>',
+    'sin_hist': '<span style="font-size:11px;background:#f0432211;color:var(--rd);padding:2px 8px;border-radius:4px">sin historial</span>',
+    'espera':   '<span style="font-size:11px;background:#4d8ef022;color:var(--bl-l);padding:2px 8px;border-radius:4px">en espera</span>',
+  };
+  const MARCA_COL2 = {Lays:'var(--bl)',Doritos:'#f0a500',Cheetos:'#f04d4d','3D':'var(--gr)'};
 
-  document.getElementById('ger-tbody').innerHTML = data.map(r => {
-    const col = MARCA_COLOR[r.marca] || '#888';
-    const barW = Math.round((r.neto_actual / 3) * 100);
-    return '<tr>' +
-      '<td style="font-weight:600">#' + r.cliente + '</td>' +
-      '<td>V' + r.vendedor + '</td>' +
-      '<td><span class="bdg" style="background:' + (MESA_COLORS[r.mesa]||'#888') + '22;color:' + (MESA_COLORS[r.mesa]||'#888') + '">' + r.mesa + '</span></td>' +
-      '<td style="font-size:11px;color:var(--tx2)">' + (r.dias||[]).map(function(d){return Array.isArray(d)?d[0]:d;}).join(' / ') + '</td>' +
-      '<td><span style="color:' + col + ';font-weight:700">' + r.marca + '</span></td>' +
-      '<td style="font-size:11px;color:var(--tx2)">' + r.articulo + '</td>' +
-      '<td style="font-size:11px;color:var(--tx3)">' + r.codigo_art + '</td>' +
-      '<td class="num">' +
-        '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">' +
-          '<div style="width:40px;height:4px;background:var(--bg4);border-radius:2px">' +
-            '<div style="height:100%;width:' + Math.min(barW,100) + '%;background:' + col + ';border-radius:2px"></div>' +
-          '</div>' +
-          r.neto_actual + 'u' +
-        '</div>' +
-      '</td>' +
-      '<td class="num"><span style="color:var(--am-l);font-weight:700">+' + r.cantidad_crea + '</span></td>' +
+  document.getElementById('ger-tbody').innerHTML = data.length ? data.map(r => {
+    const col = MARCA_COL2[r.marca]||'#888';
+    const barW = Math.max(0, Math.min(100, Math.round((r.neto_actual/3)*100)));
+    const antTxt = r.compro_ant ? '✓ '+r.neto_ant+'u' : '— no compró';
+    const antCol = r.compro_ant ? 'var(--gr-l)' : 'var(--tx3)';
+    return '<tr>'+
+      '<td style="font-weight:600">#'+r.cliente+'</td>'+
+      '<td>V'+r.vendedor+'</td>'+
+      '<td><span class="bdg" style="background:'+(MESA_COLORS[r.mesa]||'#888')+'22;color:'+(MESA_COLORS[r.mesa]||'#888')+'">'+r.mesa+'</span></td>'+
+      '<td style="font-size:11px;color:var(--tx2)">'+(r.dias||[]).map(d=>Array.isArray(d)?d[0]:d).join(' / ')+'</td>'+
+      '<td><span style="color:'+col+';font-weight:700">'+r.marca+'</span></td>'+
+      '<td>'+(ESTADO_LABEL[r.estado]||r.estado)+'</td>'+
+      '<td style="font-size:11px;color:'+antCol+'">'+antTxt+'</td>'+
+      '<td class="num">'+
+        '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">'+
+          '<div style="width:40px;height:4px;background:var(--bg4);border-radius:2px">'+
+            '<div style="height:100%;width:'+barW+'%;background:'+col+';border-radius:2px"></div>'+
+          '</div>'+
+          r.neto_actual+'u</div></td>'+
+      '<td class="num"><span style="color:var(--am-l);font-weight:700">+'+r.cantidad_crea+'</span></td>'+
     '</tr>';
-  }).join('');
+  }).join('') :
+  '<tr><td colspan="9" style="text-align:center;color:var(--tx3);padding:20px">Sin clientes con los filtros aplicados</td></tr>';
 }
-
-
-
-// ============================================================
-// EXPORTAR GERENCIAL A EXCEL (CSV descargable)
-// ============================================================
-function exportarGerencial() {
-  if (!GER_AUTH || typeof CREA_DATA === 'undefined') return;
-
-  const mesaF  = document.getElementById('ger-mesa')?.value || 'all';
-  const marcaF = document.getElementById('ger-marca')?.value || 'all';
-  const vendF  = document.getElementById('ger-vend')?.value || 'all';
-  const diaF   = document.getElementById('ger-dia')?.value || 'all';
-
-  let data = CREA_DATA;
-  if (mesaF  !== 'all') data = data.filter(r => String(r.mesa) === mesaF);
-  if (marcaF !== 'all') data = data.filter(r => r.marca === marcaF);
-  if (vendF  !== 'all') data = data.filter(r => String(r.vendedor) === vendF);
-  if (diaF   !== 'all') data = data.filter(r => (r.dias||[]).includes(diaF));
-
-  const headers = ['Cliente','Vendedor','Mesa','Dia Visita','Marca',
-                   'Articulo','Codigo Articulo','Uds Actuales','Cantidad Creativa'];
-  const rows = data.map(r => [
-    r.cliente, 'V'+r.vendedor, r.mesa,
-    (r.dias||[]).map(function(d){return Array.isArray(d)?d[0]:d;}).join(' / '),
-    r.marca, r.articulo, r.codigo_art,
-    r.neto_actual, r.cantidad_crea
-  ]);
-
-  // Generar CSV con BOM para que Excel lo abra bien
-  const bom = '\uFEFF';
-  const csv = bom + [headers, ...rows]
-    .map(row => row.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(','))
-    .join('\n');
-
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const fecha = new Date().toISOString().slice(0,10);
-  a.download = 'venta_creativa_' + fecha + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 
 
 
