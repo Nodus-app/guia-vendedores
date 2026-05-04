@@ -535,6 +535,7 @@ tr:hover td{background:var(--bg3)}
             <th>Marca</th>
             <th>Estado</th>
             <th>Mes anterior</th>
+            <th>CCC Pep</th>
             <th class="num">Uds actuales</th>
             <th class="num">Cantidad creativa</th>
           </tr></thead>
@@ -554,6 +555,7 @@ tr:hover td{background:var(--bg3)}
 // __CARTERA_DATA__
 </script>
 <script>
+
 
 
 
@@ -2556,6 +2558,10 @@ function renderGerencial() {
       '<td><span style="color:'+col+';font-weight:700">'+r.marca+'</span></td>'+
       '<td>'+(ESTADO_LABEL[r.estado]||r.estado)+'</td>'+
       '<td style="font-size:11px;color:'+antCol+'">'+antTxt+'</td>'+
+      '<td>'+(r.es_ccc
+        ? '<span style="font-size:11px;background:#2ecc8a22;color:var(--gr-l);padding:2px 8px;border-radius:4px">✓ CCC</span>'
+        : '<span style="font-size:11px;color:var(--tx3)">—</span>')+
+      '</td>'+
       '<td class="num">'+
         '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">'+
           '<div style="width:40px;height:4px;background:var(--bg4);border-radius:2px">'+
@@ -2567,6 +2573,7 @@ function renderGerencial() {
   }).join('') :
   '<tr><td colspan="9" style="text-align:center;color:var(--tx3);padding:20px">Sin clientes con los filtros aplicados</td></tr>';
 }
+
 
 
 

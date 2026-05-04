@@ -529,6 +529,11 @@ for marca in MARCAS_CREA_KW:
 vend_cli_crea = df_crea_src[df_crea_src["cod_ven"].apply(si).isin(SUP_MAP)].groupby(
     "Cliente")["cod_ven"].agg(lambda x: si(x.mode()[0]))
 
+# CCC PepsiCo: neto total de unidades PepsiCo >= 3 (sin importar la marca)
+neto_total_pep = df_crea_src.groupby("Cliente")["_neto"].sum()
+ccc_pep_set = set(int(c) for c in neto_total_pep[neto_total_pep >= 3].index)
+print(f"  Clientes CCC PepsiCo (neto >=3 uds): {len(ccc_pep_set)}")
+
 # Días trabajados del mes actual
 dias_trab_act = datos_meses[key_act]["dias_trab"]
 UMBRAL_CREATIVA = 14  # después de 14 días, los "en espera" pasan a sugerir creativa
@@ -588,6 +593,7 @@ for marca in MARCAS_CREA_KW:
             "cantidad_crea":qty,"dias":dias_visita,
             "estado":estado,"neto_ant":round(neto_ant,0),
             "compro_ant":compro_ant,
+            "es_ccc":cid in ccc_pep_set,
         })
 
 print(f"  {len(CREA_DATA)} registros de venta creativa ({len(set(r['cliente'] for r in CREA_DATA))} clientes)")
