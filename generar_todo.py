@@ -100,7 +100,7 @@ zona_path = find("cliente_zona.xlsx", "zona")
 if not zona_path: print("ERROR: cliente_zona.xlsx no encontrado"); sys.exit(1)
 df_cz = pd.read_excel(zona_path)
 if "estado" in df_cz.columns: df_cz = df_cz[df_cz["estado"] == "A"]
-dias_map = {}; cartera_cz = {}
+dias_map = {}; cartera_cz = {}; mc_vend_ppal = {}
 for _, row in df_cz.iterrows():
     cid = si(row["cliente_codigo"]); zona = str(si(row.get("zona_codigo", 0)))
     vend = si(row.get("vendedor", 0)) if "vendedor" in df_cz.columns else si(zona[:-1]) if len(zona)>1 else 0
