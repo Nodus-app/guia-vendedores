@@ -125,6 +125,11 @@ for _, row in df_mc.iterrows():
     cid = si(row.get("codigo", 0))
     if cid<=0: continue
     vend = si(row.get("vendedor", 0))
+    # Priorizar vendedor de mesa 300/400/500 si el cliente tiene múltiples zonas
+    if cid in mc_vend_ppal and SUP_MAP.get(vend,0)==600 and SUP_MAP.get(mc_vend_ppal[cid],0)!=600:
+        vend = mc_vend_ppal[cid]
+    elif cid in mc_vend_ppal and vend not in SUP_MAP:
+        vend = mc_vend_ppal[cid]
     mc_dict[cid] = {"n":clean(row.get("razon_social",""),30),"d":clean(row.get("direccion",""),35),
         "l":clean(row.get("localidad",""),20),"v":vend,"m":SUP_MAP.get(vend,0),"ds":dias_map.get(cid,[])[:3]}
 print(f"  {len(mc_dict)} clientes activos")
