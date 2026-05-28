@@ -65,7 +65,7 @@ for _, row in df_ec.iterrows():
 print(f"  {len(VNOM)} vendedores | Mesas: {sorted(set(SUP_MAP.values()))}")
 
 MARCAS = ["Lays","Doritos","Cheetos","3D","Pep","Pehuamar","Twistos","Tostitos","Quaker"]
-MARCAS_KW = {"Lays":["lays"],"Doritos":["doritos"],"Cheetos":["cheetos"],"3D":["3d"],
+MARCAS_KW = {"Lays":["lays"],"Doritos":["doritos","dinamita"],"Cheetos":["cheetos"],"3D":["3d"],
     "Pep":["pep comun","pep rueditas","pep "],"Pehuamar":["pehuamar","pehua ","pehua p"],
     "Twistos":["twistos"],"Tostitos":["tostitos"],"Quaker":["quaker","avena"]}
 TARGETS = {"Lays":94.9,"Doritos":98.0,"Cheetos":83.9,"3D":85.7,
@@ -490,7 +490,7 @@ for key in sorted(ventas.keys()):
 
 # CREA_DATA - clientes con análisis de cobertura creativa por marca
 print("\nCalculando venta creativa necesaria...")
-MARCAS_CREA_KW = {"Lays":"lays","Doritos":"doritos","Cheetos":"cheetos","3D":"3d"}
+MARCAS_CREA_KW = {"Lays":["lays"],"Doritos":["doritos","dinamita"],"Cheetos":["cheetos"],"3D":["3d"]}
 ART_SUGERIDO_CREA = {
     "Lays":    {"art":"Lays Clasicas 40gx68x1",      "codigo":"300059432","precio":929.75},
     "Doritos": {"art":"Doritos Queso 40gx70x1",       "codigo":"300059545","precio":929.75},
@@ -505,7 +505,7 @@ df_crea_src = pd.read_excel(ventas[key_act], usecols=["Cliente","Cantidad","cami
 df_crea_src["Fecha"] = pd.to_datetime(df_crea_src.get("Fecha",pd.NaT) if "Fecha" in df_crea_src.columns else pd.NaT, errors="coerce")
 df_crea_src = df_crea_src[df_crea_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
 df_crea_src["_marca"] = df_crea_src["articulo"].apply(
-    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if kw in str(a).lower()), None))
+    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if (isinstance(kw,list) and any(k in str(a).lower() for k in kw)) or (isinstance(kw,str) and kw in str(a).lower())), None))
 df_crea_src["_neto"] = pd.to_numeric(df_crea_src["Cantidad"], errors="coerce").fillna(0)
 
 # Neto por cliente y marca (todos los camiones para no duplicar creativa)
@@ -520,7 +520,7 @@ df_ant_src = pd.read_excel(ventas[key_ant], usecols=["Cliente","Cantidad","camio
     "proveedor","articulo","tipo_venta"])
 df_ant_src = df_ant_src[df_ant_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
 df_ant_src["_marca"] = df_ant_src["articulo"].apply(
-    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if kw in str(a).lower()), None))
+    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if (isinstance(kw,list) and any(k in str(a).lower() for k in kw)) or (isinstance(kw,str) and kw in str(a).lower())), None))
 df_ant_src["_neto"] = pd.to_numeric(df_ant_src["Cantidad"], errors="coerce").fillna(0)
 
 # Clientes con cobertura mes anterior por marca
