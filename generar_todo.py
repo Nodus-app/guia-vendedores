@@ -575,12 +575,16 @@ for marca in MARCAS_CREA_KW:
     print(f"  {marca}: cob={con_cob} espera={len(en_espera)} sugerir={len(sugerir)}")
 
 # Lista de clientes a hacer creativa
+# Iterar sobre TODA la cartera (mesas 300/400/500), no solo los que aparecen en la sabana
 CREA_DATA = []
 for marca in MARCAS_CREA_KW:
     neto_m = neto_act[marca]
-    for cid_raw, neto in neto_m[neto_m < 3].items():
-        cid = int(si(cid_raw))
-        vend = int(vend_cli_crea.get(cid_raw, 0))
+    cartera_crea = {cid: mc for cid, mc in mc_dict.items() if mc.get("m",0) in [300,400,500]}
+    for cid, mc in cartera_crea.items():
+        cid_raw = cid  # int
+        neto = float(neto_m.get(cid_raw, 0))  # 0 si no compro nada
+        if neto >= 3: continue  # ya tiene cobertura
+        vend = mc.get("v", 0)
         if vend not in SUP_MAP or SUP_MAP[vend] == 600: continue
         # Clasificar:
         # - compró con venta REAL el mes anterior → esperar hasta día 14
