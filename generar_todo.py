@@ -550,7 +550,7 @@ print(f"  Clientes CCC PepsiCo (neto >=3 uds): {len(ccc_pep_set)}")
 
 # Días trabajados del mes actual
 dias_trab_act = datos_meses[key_act]["dias_trab"]
-UMBRAL_CREATIVA = 14  # después de 14 días, los "en espera" pasan a sugerir creativa
+UMBRAL_CREATIVA = 0  # sugerir creativa desde el dia 1, sin periodo de espera
 
 # Resumen de cobertura por marca (para el panel)
 CREA_RESUMEN = {}
