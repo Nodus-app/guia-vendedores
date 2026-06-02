@@ -450,8 +450,13 @@ function initDias(vendCod){
     var d=GUIA_DATA[cids[i]];
     if(d.v!==vendCod) continue;
     var ds=d.ds||[];
+    // contar cliente una sola vez por dia unico (evitar duplicados por multiples zonas)
+    var diasUnicos={};
     for(var j=0;j<ds.length;j++){
       var nom=Array.isArray(ds[j])?ds[j][0]:String(ds[j]);
+      diasUnicos[nom]=true;
+    }
+    for(var nom in diasUnicos){
       diasVend[nom]=(diasVend[nom]||0)+1;
     }
   }
