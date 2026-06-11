@@ -2631,6 +2631,47 @@ function renderGerencial() {
 
 
 
+function exportarGerencial() {
+  if (typeof CREA_DATA === 'undefined') { alert('Sin datos'); return; }
+  const mesaF  = document.getElementById('ger-mesa')?.value  || 'all';
+  const marcaF = document.getElementById('ger-marca')?.value || 'all';
+  const vendF  = document.getElementById('ger-vend')?.value  || 'all';
+  const diaF   = document.getElementById('ger-dia')?.value   || 'all';
+  const ESTADO_LABEL = {sugerir:'Sugerir creativa', sin_hist:'Sin historial', espera:'En espera'};
+  let data = CREA_DATA.filter(r => {
+    if (mesaF !== 'all' && r.mesa !== parseInt(mesaF)) return false;
+    if (marcaF !== 'all' && r.marca !== marcaF) return false;
+    if (vendF !== 'all' && r.vendedor !== parseInt(vendF)) return false;
+    if (diaF !== 'all' && !(r.dias||[]).some(d=>(Array.isArray(d)?d[0]:d)===diaF)) return false;
+    return true;
+  });
+  if (!data.length) { alert('Sin datos con los filtros aplicados'); return; }
+  const cols = ['Cliente','Vendedor','Mesa','Dia visita','Marca','Estado','Mes anterior','CCC PepsiCo','Uds actuales','Cantidad creativa'];
+  const rows = data.map(r => [
+    r.cliente,
+    'V'+r.vendedor,
+    r.mesa,
+    (r.dias||[]).map(d=>Array.isArray(d)?d[0]:d).join(' / '),
+    r.marca,
+    ESTADO_LABEL[r.estado]||r.estado,
+    r.compro_ant ? r.neto_ant+'u' : 'No compró',
+    r.es_ccc ? 'Si' : 'No',
+    r.neto_actual+'u',
+    '+'+r.cantidad_crea
+  ]);
+  let csv = cols.join(',') + '
+';
+  csv += rows.map(r => r.map(v => '"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('
+');
+  const blob = new Blob(["﻿"+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'creativa_611_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function sortGerencial(col) {
   if (GER_SORT.col === col) {
     GER_SORT.dir *= -1;
