@@ -2633,39 +2633,44 @@ function renderGerencial() {
 
 function exportarGerencial() {
   if (typeof CREA_DATA === 'undefined') { alert('Sin datos'); return; }
-  const mesaF  = document.getElementById('ger-mesa')?.value  || 'all';
-  const marcaF = document.getElementById('ger-marca')?.value || 'all';
-  const vendF  = document.getElementById('ger-vend')?.value  || 'all';
-  const diaF   = document.getElementById('ger-dia')?.value   || 'all';
-  const ESTADO_LABEL = {sugerir:'Sugerir creativa', sin_hist:'Sin historial', espera:'En espera'};
-  let data = CREA_DATA.filter(r => {
+  var mesaF  = document.getElementById('ger-mesa')?.value  || 'all';
+  var marcaF = document.getElementById('ger-marca')?.value || 'all';
+  var vendF  = document.getElementById('ger-vend')?.value  || 'all';
+  var diaF   = document.getElementById('ger-dia')?.value   || 'all';
+  var ELABEL = {sugerir:'Sugerir creativa', sin_hist:'Sin historial', espera:'En espera'};
+  var data = CREA_DATA.filter(function(r) {
     if (mesaF !== 'all' && r.mesa !== parseInt(mesaF)) return false;
     if (marcaF !== 'all' && r.marca !== marcaF) return false;
     if (vendF !== 'all' && r.vendedor !== parseInt(vendF)) return false;
-    if (diaF !== 'all' && !(r.dias||[]).some(d=>(Array.isArray(d)?d[0]:d)===diaF)) return false;
+    if (diaF !== 'all' && !(r.dias||[]).some(function(d){return (Array.isArray(d)?d[0]:d)===diaF;})) return false;
     return true;
   });
   if (!data.length) { alert('Sin datos con los filtros aplicados'); return; }
-  const cols = ['Cliente','Vendedor','Mesa','Dia visita','Marca','Estado','Mes anterior','CCC PepsiCo','Uds actuales','Cantidad creativa'];
-  const rows = data.map(r => [
-    r.cliente,
-    'V'+r.vendedor,
-    r.mesa,
-    (r.dias||[]).map(d=>Array.isArray(d)?d[0]:d).join(' / '),
-    r.marca,
-    ESTADO_LABEL[r.estado]||r.estado,
-    r.compro_ant ? r.neto_ant+'u' : 'No compró',
-    r.es_ccc ? 'Si' : 'No',
-    r.neto_actual+'u',
-    '+'+r.cantidad_crea
-  ]);
-  let csv = cols.join(',') + '
-';
-  csv += rows.map(r => r.map(v => '"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('
-');
-  const blob = new Blob(["﻿"+csv], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  var cols = ['Cliente','Vendedor','Mesa','Dia visita','Marca','Estado','Mes anterior','CCC PepsiCo','Uds actuales','Cantidad creativa'];
+  var rows = data.map(function(r) {
+    return [
+      r.cliente,
+      'V'+r.vendedor,
+      r.mesa,
+      (r.dias||[]).map(function(d){return Array.isArray(d)?d[0]:d;}).join(' / '),
+      r.marca,
+      ELABEL[r.estado]||r.estado,
+      r.compro_ant ? r.neto_ant+'u' : 'No compro',
+      r.es_ccc ? 'Si' : 'No',
+      r.neto_actual+'u',
+      '+'+r.cantidad_crea
+    ];
+  });
+  var sep = String.fromCharCode(10);
+  var q = String.fromCharCode(34);
+  var csv = cols.map(function(c){return q+c+q;}).join(',') + sep;
+  csv += rows.map(function(r){
+    return r.map(function(v){return q+String(v||'').replace(new RegExp(q,'g'),q+q)+q;}).join(',');
+  }).join(sep);
+  var bom = String.fromCharCode(0xFEFF);
+  var blob = new Blob([bom+csv], {type:'text/csv;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
   a.href = url;
   a.download = 'creativa_611_' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
