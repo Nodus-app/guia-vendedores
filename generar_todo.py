@@ -65,7 +65,7 @@ for _, row in df_ec.iterrows():
 print(f"  {len(VNOM)} vendedores | Mesas: {sorted(set(SUP_MAP.values()))}")
 
 MARCAS = ["Lays","Doritos","Cheetos","3D","Pep","Pehuamar","Twistos","Tostitos","Quaker"]
-MARCAS_KW = {"Lays":["lays"],"Doritos":["doritos","dinamita"],"Cheetos":["cheetos"],"3D":["3d"],
+MARCAS_KW = {"Lays":["lays"],"Doritos":["doritos"],"Cheetos":["cheetos"],"3D":["3d"],
     "Pep":["pep comun","pep rueditas","pep "],"Pehuamar":["pehuamar","pehua ","pehua p"],
     "Twistos":["twistos"],"Tostitos":["tostitos"],"Quaker":["quaker","avena"]}
 TARGETS = {"Lays":94.9,"Doritos":98.0,"Cheetos":83.9,"3D":85.7,
@@ -240,7 +240,7 @@ def procesar(path, excluir_creativa=True):
     df["_pep"] = df["proveedor"].str.contains("Pepsico", case=False, na=False)
     df["_prov"]= df["proveedor"].apply(get_prov)
     df_pep = df[df["_pep"] & (df["camion"]<700 if excluir_creativa else True)].copy()
-    df_real= df[df["camion"]<700 if excluir_creativa else pd.Series([True]*len(df))].copy()
+    df_real= df[df["camion"]<700].copy() if excluir_creativa else df.copy()
     dias_trab = df_pep["Fecha"].dt.date.nunique() if len(df_pep) else 1
     # CCC = cliente con neto de unidades >= 3 (venta - devolucion - cambio)
     df_vta = df_pep[df_pep["tipo_venta"]=="Venta"]
@@ -490,7 +490,7 @@ for key in sorted(ventas.keys()):
 
 # CREA_DATA - clientes con análisis de cobertura creativa por marca
 print("\nCalculando venta creativa necesaria...")
-MARCAS_CREA_KW = {"Lays":["lays"],"Doritos":["doritos","dinamita"],"Cheetos":["cheetos"],"3D":["3d"]}
+MARCAS_CREA_KW = {"Lays":"lays","Doritos":"doritos","Cheetos":"cheetos","3D":"3d"}
 ART_SUGERIDO_CREA = {
     "Lays":    {"art":"Lays Clasicas 40gx68x1",      "codigo":"300059432","precio":929.75},
     "Doritos": {"art":"Doritos Queso 40gx70x1",       "codigo":"300059545","precio":929.75},
@@ -505,7 +505,7 @@ df_crea_src = pd.read_excel(ventas[key_act], usecols=["Cliente","Cantidad","cami
 df_crea_src["Fecha"] = pd.to_datetime(df_crea_src.get("Fecha",pd.NaT) if "Fecha" in df_crea_src.columns else pd.NaT, errors="coerce")
 df_crea_src = df_crea_src[df_crea_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
 df_crea_src["_marca"] = df_crea_src["articulo"].apply(
-    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if (isinstance(kw,list) and any(k in str(a).lower() for k in kw)) or (isinstance(kw,str) and kw in str(a).lower())), None))
+    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if kw in str(a).lower()), None))
 df_crea_src["_neto"] = pd.to_numeric(df_crea_src["Cantidad"], errors="coerce").fillna(0)
 
 # Neto por cliente y marca (todos los camiones para no duplicar creativa)
@@ -520,7 +520,7 @@ df_ant_src = pd.read_excel(ventas[key_ant], usecols=["Cliente","Cantidad","camio
     "proveedor","articulo","tipo_venta"])
 df_ant_src = df_ant_src[df_ant_src["proveedor"].str.contains("Pepsico",case=False,na=False)].copy()
 df_ant_src["_marca"] = df_ant_src["articulo"].apply(
-    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if (isinstance(kw,list) and any(k in str(a).lower() for k in kw)) or (isinstance(kw,str) and kw in str(a).lower())), None))
+    lambda a: next((mk for mk,kw in MARCAS_CREA_KW.items() if kw in str(a).lower()), None))
 df_ant_src["_neto"] = pd.to_numeric(df_ant_src["Cantidad"], errors="coerce").fillna(0)
 
 # Clientes con cobertura mes anterior por marca
@@ -550,7 +550,7 @@ print(f"  Clientes CCC PepsiCo (neto >=3 uds): {len(ccc_pep_set)}")
 
 # Días trabajados del mes actual
 dias_trab_act = datos_meses[key_act]["dias_trab"]
-UMBRAL_CREATIVA = 0  # sugerir creativa desde el dia 1, sin periodo de espera
+UMBRAL_CREATIVA = 14  # después de 14 días, los "en espera" pasan a sugerir creativa
 
 # Resumen de cobertura por marca (para el panel)
 CREA_RESUMEN = {}
@@ -575,16 +575,12 @@ for marca in MARCAS_CREA_KW:
     print(f"  {marca}: cob={con_cob} espera={len(en_espera)} sugerir={len(sugerir)}")
 
 # Lista de clientes a hacer creativa
-# Iterar sobre TODA la cartera (mesas 300/400/500), no solo los que aparecen en la sabana
 CREA_DATA = []
 for marca in MARCAS_CREA_KW:
     neto_m = neto_act[marca]
-    cartera_crea = {cid: mc for cid, mc in mc_dict.items() if mc.get("m",0) in [300,400,500]}
-    for cid, mc in cartera_crea.items():
-        cid_raw = cid  # int
-        neto = float(neto_m.get(cid_raw, 0))  # 0 si no compro nada
-        if neto >= 3: continue  # ya tiene cobertura
-        vend = mc.get("v", 0)
+    for cid_raw, neto in neto_m[neto_m < 3].items():
+        cid = int(si(cid_raw))
+        vend = int(vend_cli_crea.get(cid_raw, 0))
         if vend not in SUP_MAP or SUP_MAP[vend] == 600: continue
         # Clasificar:
         # - compró con venta REAL el mes anterior → esperar hasta día 14
