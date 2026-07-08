@@ -94,45 +94,67 @@ def get_cat(art):
     return "salty_sb"
 def get_prov(p): return PROV_MAP.get(str(p).strip(), str(p).strip()[:20])
 
-# CLIENTE ZONA
-print("Leyendo cliente zona...")
-zona_path = find("cliente_zona.xlsx", "zona")
-if not zona_path: print("ERROR: cliente_zona.xlsx no encontrado"); sys.exit(1)
-df_cz = pd.read_excel(zona_path)
-if "estado" in df_cz.columns: df_cz = df_cz[df_cz["estado"] == "A"]
-dias_map = {}; cartera_cz = {}; mc_vend_ppal = {}
-for _, row in df_cz.iterrows():
-    cid = si(row["cliente_codigo"]); zona = str(si(row.get("zona_codigo", 0)))
-    vend = si(row.get("vendedor", 0)) if "vendedor" in df_cz.columns else si(zona[:-1]) if len(zona)>1 else 0
-    dia = si(zona[-1]) if len(zona)>0 else 0
-    if cid>0 and vend>0:
-        if cid not in dias_map: dias_map[cid] = []
-        if 1<=dia<=6: dias_map[cid].append([DIA_MAP[dia], vend])
-        if vend in SUP_MAP:
-            if vend not in cartera_cz: cartera_cz[vend] = set()
-            cartera_cz[vend].add(cid)
-cartera_cz = {v: len(c) for v, c in cartera_cz.items()}
-print(f"  V51={cartera_cz.get(51,0)}, V45={cartera_cz.get(45,0)}")
+# MAESTRO CLIENTES CON DIAS DE VISITA (reemplaza cliente_zona + maestro_clientes)
+print("Leyendo maestro clientes con dias de visita...")
+mc_path = find("maestro_clientes_dias.xlsx", "maestro_clientes_dias") or find("maesro_clientes_con_dias_de_visita.xlsx", "dias")
+if not mc_path:
+    # fallback: buscar cualquier archivo que tenga "dias" en el nombre
+    for f in os.listdir(DATA_DIR):
+        if "dias" in f.lower() and f.endswith(".xlsx"):
+            mc_path = os.path.join(DATA_DIR, f); break
+if not mc_path: print("ERROR: maestro_clientes_dias.xlsx no encontrado"); sys.exit(1)
 
-# MAESTRO
-print("Leyendo maestro clientes...")
-mc_path = find("maestro_clientes.xlsx", "maestro")
-if not mc_path: print("ERROR: maestro_clientes.xlsx no encontrado"); sys.exit(1)
+DIAS_COLS = ["lunes","martes","miercoles","jueves","viernes","sabado"]
 df_mc = pd.read_excel(mc_path)
-if "estado" in df_mc.columns: df_mc = df_mc[df_mc["estado"] == "A"]
-mc_dict = {}
+# Normalizar nombres de columna a minúsculas
+df_mc.columns = [c.lower().strip() for c in df_mc.columns]
+
+dias_map = {}; cartera_cz = {}; mc_dict = {}; mc_vend_ppal = {}
+
 for _, row in df_mc.iterrows():
     cid = si(row.get("codigo", 0))
-    if cid<=0: continue
-    vend = si(row.get("vendedor", 0))
-    # Priorizar vendedor de mesa 300/400/500 si el cliente tiene múltiples zonas
-    if cid in mc_vend_ppal and SUP_MAP.get(vend,0)==600 and SUP_MAP.get(mc_vend_ppal[cid],0)!=600:
-        vend = mc_vend_ppal[cid]
-    elif cid in mc_vend_ppal and vend not in SUP_MAP:
-        vend = mc_vend_ppal[cid]
-    mc_dict[cid] = {"n":clean(row.get("razon_social",""),30),"d":clean(row.get("direccion",""),35),
-        "l":clean(row.get("localidad",""),20),"v":vend,"m":SUP_MAP.get(vend,0),"ds":dias_map.get(cid,[])[:3]}
-print(f"  {len(mc_dict)} clientes activos")
+    if cid <= 0: continue
+    zona = str(si(row.get("zona", 0)))
+    vend_zona = si(zona[:2]) if len(zona) >= 2 else 0  # primeros 2 digitos
+    dia_num = si(zona[-1]) if len(zona) > 0 else 0      # ultimo digito = dia
+
+    # Vendedor principal: el de la columna vendedor del archivo
+    vend = si(row.get("vendedor", 0)) or vend_zona
+
+    # Dias de visita: columnas lunes-sabado contienen el cod_vendedor (0 si no visita)
+    if cid not in dias_map: dias_map[cid] = []
+    for dia_nom in DIAS_COLS:
+        vend_dia = si(row.get(dia_nom, 0))
+        if vend_dia > 0:
+            dias_map[cid].append([dia_nom.capitalize(), vend_dia])
+
+    # Cartera: contar cliente por vendedor principal (priorizar mesa 300/400/500 sobre 600)
+    if vend in SUP_MAP:
+        if cid not in mc_vend_ppal:
+            mc_vend_ppal[cid] = vend
+        elif SUP_MAP.get(vend,0) != 600 and SUP_MAP.get(mc_vend_ppal[cid],0) == 600:
+            mc_vend_ppal[cid] = vend  # reemplazar 600 por mesa menor
+
+# Construir mc_dict con vendedor principal ya resuelto
+df_mc_u = df_mc.drop_duplicates(subset=["codigo"], keep="first")
+for _, row in df_mc_u.iterrows():
+    cid = si(row.get("codigo", 0))
+    if cid <= 0: continue
+    vend = mc_vend_ppal.get(cid, si(row.get("vendedor", 0)))
+    if vend not in SUP_MAP: continue
+    if vend not in cartera_cz: cartera_cz[vend] = set()
+    cartera_cz[vend].add(cid)
+    mc_dict[cid] = {
+        "n": clean(row.get("razon_social",""), 30),
+        "d": clean(row.get("direccion",""), 35),
+        "l": "",  # no hay localidad en este archivo
+        "v": vend,
+        "m": SUP_MAP.get(vend, 0),
+        "ds": dias_map.get(cid, [])[:4]
+    }
+
+cartera_cz = {v: len(c) for v, c in cartera_cz.items()}
+print(f"  {len(mc_dict)} clientes activos | V42={cartera_cz.get(42,0)}, V51={cartera_cz.get(51,0)}")
 
 # MAESTRO DE ARTÍCULOS - peso por artículo
 print("Leyendo maestro de artículos...")
