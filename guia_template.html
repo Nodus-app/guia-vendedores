@@ -385,6 +385,19 @@ function doLogout(){
   mostrar('pg-login');
 }
 
+// ── AUTOLOGIN (viene del portal de entrada index.html) ─────────
+(function(){
+  var av=sessionStorage.getItem('auto_vend');
+  var ap=sessionStorage.getItem('auto_pass');
+  if(av){
+    sessionStorage.removeItem('auto_vend');
+    sessionStorage.removeItem('auto_pass');
+    document.getElementById('inp-vend').value=av;
+    document.getElementById('inp-pass').value=ap||'';
+    doLogin();
+  }
+})();
+
 // ── DASHBOARD ─────────────────────────────────────────────────
 function renderDash(){
   var v=VENDEDOR;
